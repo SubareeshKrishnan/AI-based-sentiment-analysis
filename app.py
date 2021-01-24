@@ -1,5 +1,6 @@
 import pickle
 import pandas as pd
+import numpy as np
 import webbrowser
 import dash
 import dash_core_components as dcc
@@ -8,7 +9,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
-import sqlite3 as sql
+import plotly.graph_objects as go
 
 app = dash.Dash(external_stylesheets=[dbc.themes.BOOTSTRAP])
 project_name = "Sentiment Analysis with Insights"
@@ -20,10 +21,9 @@ def load_model():
     global pickle_model
     global vocab
     global df
-    global scrappedReviews
     
     df = pd.read_csv("balanced_reviews.csv")    
-    scrappedReviews = pd.read_csv('scrappedReviewsAll.csv')
+    
     with open("pickle_model.pkl", 'rb') as file:
         pickle_model = pickle.load(file)
     with open("features.pkl", 'rb') as voc:
@@ -37,19 +37,35 @@ def check_review(reviewText):
 
 def create_app_ui():
     global project_name
-    conn = sql.connect('scrappedReviewsAll.db')
-    scrappedReviewsNew = conn.execute('SELECT reviews FROM scrappedReviewsAllTable').fetchall()    
-    res = [''.join(i) for i in scrappedReviewsNew]
+    global df
+    df = df.dropna()
+    df = df[df['overall'] != 3]
+    df['Positivity'] = np.where(df['overall'] > 3, 1, 0)
+    labels = ['Positive Reviews', 'Negative Reviews']
+    values = [len(df[df.Positivity == 1]), len(df[df.Positivity == 0])]
     main_layout = dbc.Container(
         dbc.Jumbotron(
                 [
                     html.H1(id = 'heading', children = project_name, className = 'display-3 mb-4'),
+                    dbc.Container(
+                        dcc.Loading(
+                        dcc.Graph(
+                            figure = {'data' : [go.Pie(labels=labels, values=values)],
+                                      'layout': go.Layout(height = 600, width = 1000, autosize = False)
+                                      }
+                            )
+                        ),
+                        className = 'd-flex justify-content-center'
+                    ),
+                    
+                    html.Hr(),
                     dbc.Textarea(id = 'textarea', className="mb-3", placeholder="Enter the Review", value = 'My daughter loves these shoes', style = {'height': '150px'}),
+                    html.Hr(),
                     dbc.Container([
                         dcc.Dropdown(
                     id='dropdown',
                     placeholder = 'Select a Review',
-                    options=[{'label': i[:100] + "...", 'value': i} for i in res],
+                    options=[{'label': i[:100] + "...", 'value': i} for i in df.reviewText.sample(50)],
                     value = df.reviewText[0],
                     style = {'margin-bottom': '30px'}
                     
